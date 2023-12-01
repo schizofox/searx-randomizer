@@ -20,23 +20,23 @@ fn main() {
 
     let engines: Vec<String> = serde_json::from_str(&json).expect("Failed to deserialize JSON");
 
-    println!("Now listening on 127.0.0.1:7482");
+    println!("Now listening on 127.0.0.1:8000");
 
-    rouille::start_server("127.0.0.1:7482", move |request| {
-            router!(request,
-                    (GET) (/) => {
-                let file = match File::open("public/index.html") {
-                    Ok(f) => f,
-                    Err(_) => return Response::empty_404(),
-                };
+    rouille::start_server("127.0.0.1:8000", move |request| {
+        router!(request,
+                (GET) (/) => {
+            let file = match File::open("public/index.html") {
+                Ok(f) => f,
+                Err(_) => return Response::empty_404(),
+            };
 
-                Response::from_file("text/html", file)
+            Response::from_file("text/html", file)
+        },
+            (GET) (/search) => {
+                rouille::Response::redirect_302(format!("https://{}/search?{}", get_random_element(&engines), &request.raw_query_string()))
+
             },
-                (GET) (/search) => {
-                    rouille::Response::redirect_302(format!("https://{}/search?{}", get_random_element(&engines), &request.raw_query_string()))
-
-                },
-                _ => rouille::match_assets(request, "public")
-            )
+            _ => rouille::match_assets(request, "public")
+        )
     });
 }
