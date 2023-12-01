@@ -21,10 +21,19 @@
         pkgs,
         system,
         self',
+        lib,
         ...
       }: let
         craneLib = crane.lib.${system};
-        searx-instance-randomizer = pkgs.callPackage ./default.nix {inherit craneLib;};
+
+        searx-instance-randomizer = craneLib.buildPackage {
+          src = craneLib.cleanCargoSource (craneLib.path ./.);
+          strictDeps = true;
+          buildInputs = pkgs.lib.optionals pkgs.stdenv.isDarwin [
+            # Additional darwin specific inputs can be set here
+            pkgs.libiconv
+          ];
+        };
       in {
         checks = {
           inherit searx-instance-randomizer;
