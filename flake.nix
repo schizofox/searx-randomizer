@@ -1,31 +1,42 @@
 {
+  description = "Description for the project";
+
   inputs = {
-    flake-utils.url = "github:numtide/flake-utils";
-    naersk.url = "github:nix-community/naersk";
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    crane = {
+      url = "github:ipetkov/crane";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, flake-utils, naersk, nixpkgs }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = (import nixpkgs) {
-          inherit system;
+  outputs = {
+    flake-parts,
+    crane,
+    ...
+  } @ inputs:
+    flake-parts.lib.mkFlake {inherit inputs;} {
+      systems = ["x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin"];
+      perSystem = {
+        pkgs,
+        system,
+        self',
+        ...
+      }: let
+        craneLib = crane.lib.${system};
+        searx-instance-randomizer = pkgs.callPackage ./default.nix {inherit craneLib;};
+      in {
+        checks = {
+          inherit searx-instance-randomizer;
         };
 
-        naersk' = pkgs.callPackage naersk {};
-
-        searx-randomizer = naersk'.buildPackage {
-          src = ./.;
+        packages = {
+          default = searx-instance-randomizer;
         };
-      in rec {
-        # For `nix build` & `nix run`:
-        packages.searx-randomizer = searx-randomizer;
-        packages.default = searx-randomizer;
 
-        # For `nix develop`:
-        devShell = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [ rustc cargo ];
+        devShells.default = craneLib.devShell {
+          inherit (self') checks;
         };
-      }
-    );
+      };
+    };
 }
