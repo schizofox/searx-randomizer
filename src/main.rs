@@ -1,7 +1,7 @@
 extern crate rouille;
 
 use rand::Rng;
-use rouille::{router, Response};
+use rouille::router;
 use std::fs::File;
 use std::io::Read;
 
@@ -24,19 +24,11 @@ fn main() {
 
     rouille::start_server("127.0.0.1:8000", move |request| {
         router!(request,
-                (GET) (/) => {
-            let file = match File::open("public/index.html") {
-                Ok(f) => f,
-                Err(_) => return Response::empty_404(),
-            };
-
-            Response::from_file("text/html", file)
-        },
             (GET) (/search) => {
                 rouille::Response::redirect_302(format!("https://{}/search?{}", get_random_element(&engines), &request.raw_query_string()))
 
             },
-            _ => rouille::match_assets(request, "public")
+            _ => rouille::Response::empty_404()
         )
     });
 }
