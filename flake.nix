@@ -14,11 +14,13 @@
 
         naersk' = pkgs.callPackage naersk {};
 
-      in rec {
-        # For `nix build` & `nix run`:
-        defaultPackage = naersk'.buildPackage {
+        searx-randomizer = naersk'.buildPackage {
           src = ./.;
         };
+      in rec {
+        # For `nix build` & `nix run`:
+        packages.searx-randomizer = searx-randomizer;
+        packages.default = searx-randomizer;
 
         # For `nix develop`:
         devShell = pkgs.mkShell {
