@@ -24,10 +24,10 @@
         lib,
         ...
       }: let
-        craneLib = crane.lib.${system};
+        craneLib = crane.mkLib pkgs;
 
         searx-instance-randomizer = craneLib.buildPackage {
-          src = craneLib.cleanCargoSource (craneLib.path ./.);
+          src = craneLib.cleanCargoSource ./.;
           strictDeps = true;
           buildInputs = pkgs.lib.optionals pkgs.stdenv.isDarwin [
             # Additional darwin specific inputs can be set here
