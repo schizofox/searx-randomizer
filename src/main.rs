@@ -1,10 +1,13 @@
-use std::{fs::File, io::Read};
+use std::{fs::File, io::Read, net::SocketAddr};
 
+use anyhow::{Context, Result};
 use clap::Parser;
+use log::{error, info};
 use rand::Rng;
 use rouille::router;
 
 #[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
 struct Opts {
   /// IP address to bind the server
   #[clap(short = 'i', long, default_value = "127.0.0.1")]
@@ -12,48 +15,63 @@ struct Opts {
 
   /// Port to bind the server
   #[clap(short = 'p', long, default_value = "8000")]
-  port: String,
+  port: u16,
 
   /// Path to the JSON file containing Searx instances
   #[clap(short = 'f', long, env = "SEARX_INSTANCES")]
   searx_instances: String,
 }
 
-fn main() {
-  let opts = Opts::parse();
-  let mut json = String::new();
-  if let Err(e) = File::open(&opts.searx_instances)
-    .and_then(|mut file| file.read_to_string(&mut json))
-  {
-    eprintln!("Failed to read file '{}': {}", opts.searx_instances, e);
-    std::process::exit(1);
-  }
+fn main() -> Result<()> {
+  env_logger::Builder::from_env(
+    env_logger::Env::default().default_filter_or("info"),
+  )
+  .init();
 
-  let engines: Vec<String> = match serde_json::from_str(&json) {
-    Ok(parsed) => parsed,
-    Err(e) => {
-      eprintln!("Failed to deserialize JSON: {}", e);
-      std::process::exit(1);
-    },
-  };
+  let opts = Opts::parse();
+
+  smol::block_on(async {
+    let engines = load_engines(&opts.searx_instances)
+      .await
+      .context("Failed to load search engines")?;
+
+    let addr: SocketAddr = format!("{}:{}", opts.ip, opts.port)
+      .parse()
+      .context("Invalid address format")?;
+
+    start_server(addr, engines)
+  })
+}
+
+async fn load_engines(path: &str) -> Result<Vec<String>> {
+  let mut json = String::new();
+  File::open(path)
+    .and_then(|mut file| file.read_to_string(&mut json))
+    .with_context(|| format!("Failed to read file '{path}'"))?;
+
+  let engines: Vec<String> =
+    serde_json::from_str(&json).context("Failed to deserialize JSON")?;
 
   if engines.is_empty() {
-    eprintln!(
-      "The list of search engines is empty. Please check the input file."
-    );
-    std::process::exit(1);
+    error!("The list of search engines is empty. Please check the input file.");
+    anyhow::bail!("Empty search engines list");
   }
 
-  let address = format!("{}:{}", opts.ip, opts.port);
-  println!("Now listening on {}", address);
+  info!("Loaded {} search engines", engines.len());
+  Ok(engines)
+}
 
-  rouille::start_server(address, move |request| {
+fn start_server(addr: SocketAddr, engines: Vec<String>) -> Result<()> {
+  info!("Starting server on {}", addr);
+
+  rouille::start_server(addr.to_string(), move |request| {
     router!(request,
         (GET) (/) => {
             rouille::Response::text("Incorrect endpoint! Please use /search!")
         },
         (GET) (/search) => {
             let engine = get_random_element(&engines);
+            info!("Redirecting to engine: {}", engine);
             rouille::Response::redirect_302(format!(
                 "https://{}/search?{}",
                 engine,
